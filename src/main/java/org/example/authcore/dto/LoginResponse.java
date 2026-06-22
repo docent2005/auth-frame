@@ -5,6 +5,8 @@ import java.util.Collection;
 public record LoginResponse(
         String message,
         String username,
-        Collection<?> authorities
+        Collection<?> authorities,
+        String accessToken,
+        String tokenType
 ) {
 }

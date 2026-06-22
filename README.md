@@ -1,260 +1,191 @@
-# Auth Core
+# auth-core
 
-Auth Core — це бібліотека для Spring Boot, яка надає готову реалізацію session-based автентифікації користувачів через Spring Security.
+Версія: 0.0.2-SNAPSHOT
 
-Бібліотека реалізує:
+auth-core — це бібліотека для Spring Boot, яка спрощує реалізацію автентифікації на основі JWT та Spring Security.
 
-* Login API
-* Logout API
-* Current User API
-* Збереження SecurityContext у HttpSession
-* Інтеграцію зі Spring Security AuthenticationManager
+Основна мета бібліотеки — прибрати необхідність щоразу реалізовувати однакову логіку входу користувача, генерації JWT-токенів та їх перевірки. Бібліотека надає готові сервіси та фільтри, які можна підключити до будь-якого Spring Boot застосунку.
 
-Бібліотека не містить власної моделі користувача і не працює напряму з базою даних. Вона використовує стандартні механізми Spring Security та очікує, що основний застосунок надасть реалізацію UserDetailsService.
+На даний момент бібліотека реалізує:
 
----
+* endpoint для входу користувача;
+* генерацію JWT access token;
+* перевірку JWT токенів;
+* автоматичне створення Authentication на основі JWT;
+* JWT Authentication Filter;
+* DTO для запитів та відповідей автентифікації;
+* інтеграцію зі Spring Security.
 
-# Features
+Бібліотека не містить:
 
-## Authentication
+* сутностей користувача;
+* сутностей ролей;
+* репозиторіїв;
+* логіки реєстрації;
+* структури бази даних;
+* бізнес-логіки застосунку.
 
-Підтримується автентифікація через:
-
-```text
-username + password
-```
-
-Після успішної автентифікації створюється:
-
-```text
-SecurityContext
-```
-
-який автоматично зберігається в:
-
-```text
-HttpSession
-```
-
-та асоціюється з cookie:
-
-```text
-JSESSIONID
-```
+Усі ці компоненти повинні бути реалізовані в основному проєкті.
 
 ---
 
-# Endpoints
+ПІДКЛЮЧЕННЯ БІБЛІОТЕКИ
 
-## Login
+Додайте залежність:
 
-### Request
-
-```http
-POST /api/auth/login
-Content-Type: application/json
-```
-
-```json
-{
-  "username": "name",
-  "password": "1234"
-}
-```
-
-### Response
-
-```json
-{
-  "message": "Login successful",
-  "username": "name",
-  "authorities": [
-    {
-      "authority": "ROLE_USER"
-    }
-  ]
-}
-```
-
-### Side Effects
-
-При успішній автентифікації сервер повертає:
-
-```http
-Set-Cookie: JSESSIONID=...
-```
-
-Ця cookie використовується для подальшої авторизації.
-
----
-
-## Current User
-
-Повертає інформацію про поточного автентифікованого користувача.
-
-### Request
-
-```http
-GET /api/auth/me
-```
-
-### Response
-
-```json
-{
-  "username": "name",
-  "authorities": [
-    {
-      "authority": "ROLE_USER"
-    }
-  ],
-  "authenticated": true
-}
-```
-
-### Authentication Required
-
-```text
-Yes
-```
-
----
-
-## Logout
-
-Очищає SecurityContext та інвалідує поточну HTTP Session.
-
-### Request
-
-```http
-POST /api/auth/logout
-```
-
-### Response
-
-```json
-{
-  "message": "Logout successful"
-}
-```
-
-### Side Effects
-
-* SecurityContext очищається
-* Session інвалідується
-* Cookie JSESSIONID видаляється
-
----
-
-# Installation
-
-## Maven
-
-```xml
 <dependency>
     <groupId>org.example</groupId>
     <artifactId>auth-core</artifactId>
-    <version>0.0.1-SNAPSHOT</version>
+    <version>0.0.2-SNAPSHOT</version>
 </dependency>
-```
 
 ---
 
-# Required Beans
+НАЛАШТУВАННЯ JWT
 
-Для роботи бібліотеки основний застосунок повинен надати такі Spring Beans.
+У application.properties необхідно вказати:
 
-## AuthenticationManager
+auth.jwt.secret=your-secret-key
+auth.jwt.expiration-ms=86400000
 
-```java
-@Bean
-public AuthenticationManager authenticationManager(
-        AuthenticationConfiguration configuration
-) throws Exception {
-    return configuration.getAuthenticationManager();
-}
-```
+auth.jwt.secret використовується для підписування JWT токенів.
 
-## PasswordEncoder
+auth.jwt.expiration-ms визначає час життя токена в мілісекундах.
 
-```java
-@Bean
-public PasswordEncoder passwordEncoder() {
-    return new BCryptPasswordEncoder();
-}
-```
+Наприклад:
 
-## UserDetailsService
+86400000 = 24 години.
 
-```java
+---
+
+ЩО ПОВИНЕН РЕАЛІЗУВАТИ ОСНОВНИЙ ПРОЄКТ
+
+Для роботи бібліотеки необхідно надати реалізацію UserDetailsService.
+
+Приклад:
+
 @Service
 public class AppUserDetailsService implements UserDetailsService {
 
-    private final UserRepository userRepository;
-
-    public AppUserDetailsService(UserRepository userRepository) {
-        this.userRepository = userRepository;
-    }
-
-    @Override
-    public UserDetails loadUserByUsername(String username) {
-
-        User user = userRepository.findByUsername(username)
-                .orElseThrow(() ->
-                        new UsernameNotFoundException(username));
-
-        return new AppUserDetails(user);
-    }
+```
+@Override
+public UserDetails loadUserByUsername(String username) {
+    // пошук користувача в базі даних
 }
 ```
 
----
+}
 
-# Security Configuration
+Також необхідно створити PasswordEncoder:
 
-Мінімальна конфігурація Spring Security.
-
-```java
 @Bean
-public SecurityFilterChain securityFilterChain(HttpSecurity http)
-        throws Exception {
-
-    return http
-            .csrf(csrf -> csrf.disable())
-            .authorizeHttpRequests(auth -> auth
-                    .requestMatchers(
-                            "/api/auth/login",
-                            "/api/auth/register"
-                    ).permitAll()
-
-                    .requestMatchers(
-                            "/api/auth/me",
-                            "/api/auth/logout"
-                    ).authenticated()
-
-                    .requestMatchers("/api/private/**")
-                    .hasRole("USER")
-
-                    .anyRequest()
-                    .authenticated()
-            )
-            .formLogin(form -> form.disable())
-            .httpBasic(basic -> basic.disable())
-            .build();
+public PasswordEncoder passwordEncoder() {
+return new BCryptPasswordEncoder();
 }
-```
+
+І AuthenticationManager:
+
+@Bean
+public AuthenticationManager authenticationManager(
+AuthenticationConfiguration configuration
+) throws Exception {
+return configuration.getAuthenticationManager();
+}
 
 ---
 
+НАЛАШТУВАННЯ SPRING SECURITY
 
+Для роботи JWT необхідно використовувати stateless режим:
 
-## Password Storage
+.sessionManagement(session ->
+session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+)
 
-Паролі повинні зберігатися у вигляді BCrypt hash.
+JWT фільтр повинен бути доданий до Security Filter Chain:
 
+.addFilterBefore(
+jwtAuthenticationFilter,
+UsernamePasswordAuthenticationFilter.class
+)
 
+Endpoint входу необхідно зробити доступним без автентифікації:
+
+.requestMatchers("/api/auth/login")
+.permitAll()
 
 ---
 
+ВХІД У СИСТЕМУ
+
+Бібліотека автоматично надає endpoint:
+
+POST /api/auth/login
+
+Приклад запиту:
+
+{
+"username": "john",
+"password": "password"
+}
+
+Приклад відповіді:
+
+{
+"message": "Login successful",
+"username": "john",
+"authorities": [
+{
+"authority": "ROLE_USER"
+}
+],
+"accessToken": "eyJ...",
+"tokenType": "Bearer"
+}
+
+---
+
+ВИКОРИСТАННЯ JWT
+
+Після успішного входу клієнт повинен зберегти access token.
+
+Для доступу до захищених endpoint токен необхідно передавати через HTTP-заголовок:
+
+Authorization: Bearer <token>
+
+Під час обробки запиту JwtAuthenticationFilter автоматично:
+
+1. зчитує токен;
+2. перевіряє його валідність;
+3. отримує ім'я користувача та ролі;
+4. створює Authentication;
+5. записує Authentication у SecurityContextHolder.
+
+Після цього Spring Security може виконувати авторизацію користувача.
+
+---
+
+АРХІТЕКТУРА
+
+Схема входу:
+
+Client
+→ /api/auth/login
+→ AuthController
+→ AuthService
+→ AuthenticationManager
+→ UserDetailsService
+→ Authentication
+→ JwtService
+→ JWT Token
+
+Схема перевірки токена:
+
+Client
+→ Authorization: Bearer <token>
+→ JwtAuthenticationFilter
+→ JwtService
+→ Authentication
+→ SecurityContextHolder
 
 
